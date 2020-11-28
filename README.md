@@ -1,5 +1,6 @@
 # BTL_Messenger-with-socket
 //Protocol
+
 Server: User id
 
 Client: 123 // user id is required
@@ -24,9 +25,15 @@ Client: GROUP
 
 Server: 1: List group
 
+<<<<<<< HEAD
  2: Join group 
 
  3:Create group
+=======
+2: Join group 
+
+3:Create group
+>>>>>>> 8a613943677a8dab3ff399a2e6f9bcf1835c3ac5
 
 Client: 3
 
@@ -54,17 +61,28 @@ Group name:
 //Join group
 
 Client: GROUP
+
 Server: 1: List group
- 2: Join group 
- 3:Create group
- Client: 2
- Server: Group id:
+
+2: Join group 
+
+3:Create group
+
+Client: 2
+
+Server: Group id:
+
 Group password:
+
 Client: INT3304
+
 123
+
 //case password wrong
+
 Server: Invalid group id or password!
 
+<<<<<<< HEAD
 //conversation
 
 Client: to 234 {messeage}
@@ -82,6 +100,11 @@ Server: From {client ID}: hello //send to 234
 //break conversation:
 
 Client:@close
+=======
+
+>>>>>>> 8a613943677a8dab3ff399a2e6f9bcf1835c3ac5
 
 Client: Exit
+
 Server: 500 bye;
+
