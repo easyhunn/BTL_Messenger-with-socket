@@ -1,7 +1,3 @@
-//Vũ Mạnh Hùng
-//18020593
-//Bài thực hành 11 
-
 import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
@@ -96,6 +92,7 @@ class ClientHandler extends Thread {
 	String myGroup;
 	HashMap<String, List<User>> group_users;
 	private boolean isLogin = false;
+	private boolean havingConversation = false;
 
 	public ClientHandler(Socket s, DataInputStream dis, DataOutputStream dos, 
 						HashMap<Socket, String> list, 
@@ -112,12 +109,23 @@ class ClientHandler extends Thread {
 		this.myGroup = "";		
 	} 
 	
+	//get client socket by user id
+	public Socket cliSocket(String user) {
+		Iterator it = list.entrySet().iterator();
+		while (it.hasNext()) {
+			Map.Entry pair = (Map.Entry) it.next();
+			if (pair.getValue().equals(user))
+				return (Socket) pair.getKey();
+		}
+		return null;
+	}
+
 	//notice sent messeage
 	public String createNotice(String mess) {
 		return "from " + userID + " " + mess;
 	}
 	public String createNotice(String mess, String user) {
-		return "from " + user + " " + mess;
+		return "from " + user + ": " + mess;
 	}
 
 	//sent messeage to client
@@ -137,10 +145,25 @@ class ClientHandler extends Thread {
 		}
 	}
 
+	//remove member from group chat
+	public void removeGroupMember(String user) {
+		group_users.get(myGroup).remove(user);
+
+	}
 	//receive messeage from client
 	public String recvFromClis() {
 		try {
 			return dis.readUTF();
+		} catch (Exception e) {
+			e.printStackTrace();
+			return "Err read messeage!";
+		}
+	}
+
+	public String recvFromClis(String user) {
+		try {
+			DataInputStream mDis = new DataInputStream(cliSocket(user).getInputStream());
+			return mDis.readUTF();
 		} catch (Exception e) {
 			e.printStackTrace();
 			return "Err read messeage!";
@@ -181,17 +204,6 @@ class ClientHandler extends Thread {
 		sentToCls(s, listUser());
 		isLogin = true;
 		return 0;
-	}
-
-	//get client socket by user id
-	public Socket cliSocket(String user) {
-		Iterator it = list.entrySet().iterator();
-		while (it.hasNext()) {
-			Map.Entry pair = (Map.Entry) it.next();
-			if (pair.getValue().equals(user))
-				return (Socket) pair.getKey();
-		}
-		return null;
 	}
 
 	//client disconnect
@@ -248,10 +260,9 @@ class ClientHandler extends Thread {
 		String pass = recvFromClis();
 		if (validGroup(id, pass)) {
 			myGroup = id;
-
-			sentToCls(this.s, "Available member: " + get_group_users(id));
 			User user = new User(this.s, userID);
 			group_users.get(id).add(user);
+			sentToCls(this.s, "Available member: " + get_group_users(id));
 			joinned = true;
 			return 1;
 		}
@@ -282,12 +293,13 @@ class ClientHandler extends Thread {
 
 			//new group			
 			groupList.put(name, pass);
-
+			myGroup = name;
 			//initialize group_users
 			List<User> users = new ArrayList<User>();
 			users.add(new User(this.s, userID));
 			group_users.put(name, users);
 			joinned = true;
+			sentToCls(this.s, "create group successfuly");
 			return 0;
 		}	
 		sentToCls(this.s, "This group name is taken, please slelect other name");
@@ -307,41 +319,79 @@ class ClientHandler extends Thread {
 			return createGroup();
 		sentToCls(this.s, "Invalid command");
 		return 0;
-	}
+	}	
 
+	private int handleConversation(String user) {
+		while (true) {
+			String mess = recvFromClis();
+			if (mess.equals("@close"))
+				return 0;
+			sentToCls(cliSocket(user), "From " + userID + ": " + mess);
+		}
+	}
 	// Main handle when client isn't joinning any group
 	public int handle(String mess) {
-		if (mess.equals("Exit")) {
-			return handleExit();
+		try {
+			if (mess.equals("Exit")) {
+				return handleExit();
+			}	
+			if (!isLogin) {
+				return handleLogin(mess);
+			}
+
+			if (mess.equals("LIST")) {
+				sentToCls(s, listUser());
+				return 1;
+			}
+			if (mess.equals("GROUP")) {
+				sentToCls(s, "1: List group\n 2: Join group \n 3:Create group");
+				return groupHandler();
+			}
+			//sent messeage to 1 client
+			if (mess.substring(0, 2).equals("to")) {
+				String user = mess.substring(3, mess.indexOf(" ", 3));
+				if (cliSocket(user) != null)
+					sentToCls(cliSocket(user), createNotice(mess, userID));
+				else
+					sentToCls(this.s, "Do not contains user id " + user);
+				return 1;
+			}
+			if (mess.substring(0, 4).equals("CHAT")) {
+				String user = mess.substring(5, mess.length());
+			
+				if (!avaiableUser(user)) {
+					return handleConversation(user);
+				}
+				sentToCls(this.s, "user " + user + " isn't connecting!");
+				return 0;
+			}
+		} catch (Exception e) {
+			sentToCls(s, "Invalid commad");
 		}
 
-		if (!isLogin) {
-			return handleLogin(mess);
-		}
-
-		if (mess.equals("LIST")) {
-			sentToCls(s, listUser());
-			return 1;
-		}
-		if (mess.equals("GROUP")) {
-			sentToCls(s, "1: List group\n 2: Join group \n 3:Create group");
-			return groupHandler();
-		}
-		//sent messeage to 1 client
-		if (mess.substring(0, 2).equals("to")) {
-			String user = mess.substring(3, mess.indexOf(" ", 3));
-			if (cliSocket(user) != null)
-				sentToCls(cliSocket(user), createNotice(mess, userID));
-			else
-				sentToCls(this.s, "Do not contains user id " + user);
-			return 1;
-		}
-		sentToCls(s, "Invalid commad");
+		
 		return 0;
 	}
 	
 	//handle when client joinning group
 	private int handleGroupChat(String mess) {
+		if (mess.equals("@END")) {
+			removeGroupMember(userID);
+			if (group_users.get(myGroup).size() > 0	) 
+				sentToGroupCls(userID + " has left this conversation");
+			else {
+				//delete group when it have no member
+				groupList.remove(myGroup);
+				group_users.remove(myGroup);	
+			}
+			myGroup = "";
+			joinned = false;
+			return 0;
+		}
+		if (mess.equals("@MEM")) {
+			sentToCls(this.s, get_group_users(myGroup));
+			return 1;
+		}
 		createNotice(mess);
 		sentToGroupCls(mess);
 		return 0;
