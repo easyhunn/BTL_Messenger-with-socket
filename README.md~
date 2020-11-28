@@ -2,8 +2,7 @@
 //Protocol
 Server: User id
 Client: 123 // user id is required
-Server:211 user id 123 ok
-list online user: 123 //users separate by space
+Server: list online user: 123 //users separate by space
 // chat to 1 client
 Client: to 345 [messeage] //sent messeage to 345 
 vd to 345 hello
@@ -41,6 +40,3 @@ Client: INT3304
 123
 //case password wrong
 Server: Invalid group id or password!
-
-Client: Exit
-Server: 500 bye;

@@ -4,14 +4,14 @@
 
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
 import java.util.HashMap; // import the HashMap class
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
 import javax.xml.namespace.QName;
-
-import jdk.internal.org.objectweb.asm.tree.analysis.Value;
 
 class User {
 	private String ID;
@@ -26,29 +26,31 @@ class User {
 		this.ID = ID;
 	}
 
-	public void setSocket (Socket s) {
+	public void setSocket(Socket s) {
 		this.s = s;
 	}
 
-	public Socket getSocket(Socket s) {
+	public Socket getSocket() {
 		return this.s;
 	}
+
 	public String getID() {
 		return this.ID;
 	}
 
 }
+
 // server class 
 public class server { 
 
 	public static HashMap<Socket, String> list;
 	public static HashMap<String, String> groupList;
-	public static HashMap<String, User> group_user;
+	public static HashMap<String, List<User>> group_users;
 	public static void main(String[] args) throws IOException { 
 	
 		list = new HashMap<Socket, String>();
 		groupList = new HashMap<String, String>();
-		group_user = new HashMap<String, User>();
+		group_users = new HashMap<String, List<User>>();
 
 		ServerSocket ss = new ServerSocket(5000); 
 		System.out.println("Waitting for client...");		
@@ -67,7 +69,7 @@ public class server {
 				
 				System.out.println("Assigning new thread for this client"); 
 
-				Thread t = new ClientHandler(s, dis, dos, list, groupList, group_user); 
+				Thread t = new ClientHandler(s, dis, dos, list, groupList, group_users); 
 
 				// Invoking the start() method 
 				t.start(); 
@@ -88,24 +90,37 @@ class ClientHandler extends Thread {
 
 	String userID = "";
 	boolean joinned = false;
-	HashMap<Socket, String> list;
+	HashMap<Socket, String> list; //user online
 	HashMap<String, String> groupList;
-	HashMap<String, String> myGroup;
-	HashMap<String, User> group_user;
+	HashMap<String, String> myGroups;
+	String myGroup;
+	HashMap<String, List<User>> group_users;
 	private boolean isLogin = false;
 
 	public ClientHandler(Socket s, DataInputStream dis, DataOutputStream dos, 
-						HashMap<Socket, String> list, HashMap<String, String> groupList, HashMap<String, User> group_user) { 
+						HashMap<Socket, String> list, 
+						HashMap<String, String> groupList, 
+						HashMap<String, List<User>> group_users) { 
 		this.s = s; 
 		this.dis = dis; 
 		this.dos = dos;
 
 		this.list = list;
 		this.groupList = groupList;
-		this.group_user = group_user;
-		this.myGroup = new HashMap<String, String>();		
+		this.group_users = group_users;
+		this.myGroups = new HashMap<String, String>();
+		this.myGroup = "";		
 	} 
 	
+	//notice sent messeage
+	public String createNotice(String mess) {
+		return "from " + userID + " " + mess;
+	}
+	public String createNotice(String mess, String user) {
+		return "from " + user + " " + mess;
+	}
+
+	//sent messeage to client
 	public void sentToCls(Socket cliSock, String mess) {
 		try {
 			DataOutputStream Dos = new DataOutputStream(cliSock.getOutputStream()); 
@@ -115,6 +130,14 @@ class ClientHandler extends Thread {
 		}
 	}
 
+	//sent messeage to whole clients in group
+	public void sentToGroupCls(String mess) {
+		for (User i : group_users.get(myGroup)) {
+			sentToCls(i.getSocket(), "To Group " + createNotice(mess));
+		}
+	}
+
+	//receive messeage from client
 	public String recvFromClis() {
 		try {
 			return dis.readUTF();
@@ -124,16 +147,18 @@ class ClientHandler extends Thread {
 		}
 	}
 
+	//check id user is taken or not
 	public boolean avaiableUser(String user) {
 		Iterator it = list.entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry pair = (Map.Entry) it.next();
 			if (user.equals(pair.getValue()))
 				return false;
-		}(
+		}
 		return true;
 	}
 
+	// list online users
 	public String listUser() {
 		String users = "list online user: ";
 		Iterator it = list.entrySet().iterator();
@@ -145,19 +170,20 @@ class ClientHandler extends Thread {
 	}
 
 	public int handleLogin(String ID) {
-		//String ID = recvFromClis();
 		if (!avaiableUser(ID)) {
 			sentToCls(s, "This username isn't available. please select other user name!");
 			return 0;
 		}
+
 		sentToCls(s, "211 User ID " + ID + " OK");
 		userID = ID;
-		list.put(s, ID);
+		list.put(s, ID); // add to list online user
 		sentToCls(s, listUser());
 		isLogin = true;
 		return 0;
 	}
 
+	//get client socket by user id
 	public Socket cliSocket(String user) {
 		Iterator it = list.entrySet().iterator();
 		while (it.hasNext()) {
@@ -167,20 +193,16 @@ class ClientHandler extends Thread {
 		}
 		return null;
 	}
-	public String getUserId(String mess) {
-		return "from " + userID + " " + mess;
-	}
-	public String createNotice(String mess, String user) {
-		return "from " + user + " " + mess;
-	}
 
+	//client disconnect
 	public int handleExit() {
 		try {
 			System.out.println("Client " + this.s + " sends exit...");
 			System.out.println("Closing this connection.");
-			list.remove(this.s);
-
+			
+			list.remove(this.s); //remove from online list
 			this.s.close();
+			
 			System.out.println("Connection closed");
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -188,9 +210,10 @@ class ClientHandler extends Thread {
 		return -1;
 	}
 
-	private String myGroupList() {
-		Iterator it = list.entrySet().iterator();
-		String group = "Joinned group: ";
+	//get all socket of member in group (to sent messeage to whole group member)
+	private String groupList() {
+		Iterator it = groupList.entrySet().iterator();
+		String group = "group: ";
 		while (it.hasNext()) {
 			Map.Entry pair = (Map.Entry) it.next();
 			group += pair.getKey() + " ";
@@ -198,25 +221,37 @@ class ClientHandler extends Thread {
 		return group;
 	}
 	
+	//check if group id pass word is correct to allow join
 	private boolean validGroup(String id, String pass) {
-		Iterator it = list.entrySet().iterator();
+		Iterator it = groupList.entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry pair = (Map.Entry) it.next();
+			System.out.println(pair.getKey() + " " + pair.getValue());
 			if (pair.getKey().equals(id) && pair.getValue().equals(pass))
 				return true;
 		}
 		return false;
 	}
 
+	//get all user joining in group
+	public String get_group_users(String grName) {
+		String s = "";
+		for (User u : group_users.get(grName)) {
+			s += u.getID() + ", ";
+		}
+		return s;
+	}
+	//handle join group
 	private int groupJoin() {
 		sentToCls(this.s, "Group id:\nGroup password:");
 		String id = recvFromClis();
 		String pass = recvFromClis();
 		if (validGroup(id, pass)) {
-			myGroup.put(id, pass);
-			sentToCls(this.s, myGroupList());
+			myGroup = id;
+
+			sentToCls(this.s, "Available member: " + get_group_users(id));
 			User user = new User(this.s, userID);
-			group_user.put(id, user);
+			group_users.get(id).add(user);
 			joinned = true;
 			return 1;
 		}
@@ -224,8 +259,9 @@ class ClientHandler extends Thread {
 		return 0;
 	}
 	
+	// is group name has taken
 	private boolean avaiableGroup(String name) {
-		Iterator it = list.entrySet().iterator();
+		Iterator it = groupList.entrySet().iterator();
 		while (it.hasNext()) {
 			Map.Entry pair = (Map.Entry) it.next();
 			if (pair.getKey().equals(name))
@@ -234,6 +270,7 @@ class ClientHandler extends Thread {
 		return true;
 	} 
 
+	//handle create group
 	private int createGroup() {
 		sentToCls(this.s, "Group name: \n0: Quit");
 		String name = recvFromClis();
@@ -241,18 +278,27 @@ class ClientHandler extends Thread {
 			return 0;
 		if (avaiableGroup(name)) {
 			sentToCls(this.s, "Group password: ");
-			String pass =  recvFromClis();
+			String pass = recvFromClis();
+
+			//new group			
 			groupList.put(name, pass);
+
+			//initialize group_users
+			List<User> users = new ArrayList<User>();
+			users.add(new User(this.s, userID));
+			group_users.put(name, users);
+			joinned = true;
 			return 0;
-		}
-		sentToCls(this.s, "This group name is taken, please slelect other name\n 0: Quit");
+		}	
+		sentToCls(this.s, "This group name is taken, please slelect other name");
 		return createGroup();
 	}
 
+	//handle select command from client
 	private int groupHandler() {
 		String cliSelect = recvFromClis();
 		if (cliSelect.equals("1")) {
-			sentToCls(this.s, myGroupList());
+			sentToCls(this.s, groupList());
 			return 1;
 		}
 		if (cliSelect.equals("2"))
@@ -263,6 +309,7 @@ class ClientHandler extends Thread {
 		return 0;
 	}
 
+	// Main handle when client isn't joinning any group
 	public int handle(String mess) {
 		if (mess.equals("Exit")) {
 			return handleExit();
@@ -271,16 +318,16 @@ class ClientHandler extends Thread {
 		if (!isLogin) {
 			return handleLogin(mess);
 		}
-		
+
 		if (mess.equals("LIST")) {
 			sentToCls(s, listUser());
 			return 1;
 		}
 		if (mess.equals("GROUP")) {
-			sentToCls(s, "1: Joined Group \n 2: Join group \n 3:Create group");
+			sentToCls(s, "1: List group\n 2: Join group \n 3:Create group");
 			return groupHandler();
 		}
-		//sent messeage
+		//sent messeage to 1 client
 		if (mess.substring(0, 2).equals("to")) {
 			String user = mess.substring(3, mess.indexOf(" ", 3));
 			if (cliSocket(user) != null)
@@ -290,24 +337,37 @@ class ClientHandler extends Thread {
 			return 1;
 		}
 		sentToCls(s, "Invalid commad");
-		return 0;		
+		return 0;
+	}
+	
+	//handle when client joinning group
+	private int handleGroupChat(String mess) {
+		createNotice(mess);
+		sentToGroupCls(mess);
+		return 0;
 	}
 
 	@Override
 	public void run() { 
 		String received; 
 		System.out.println("started..");
-		sentToCls(s, "Enter user id");
+		sentToCls(s, "User id:");
 		while (true) { 
 			try { 
-
+				
 				received = dis.readUTF();
 				System.out.println("received: " + received);
-				int res = handle(received);
-				if (res == -1)
+				int res;
+				if (!joinned)
+					res = handle(received);
+				else
+					res = handleGroupChat(received);
+
+				if (res == -1) //Exit
 					break;
 			} catch (IOException e) { 
 				e.printStackTrace();
+				list.remove(this.s);
 				break;
 			} 
 		} 
@@ -318,7 +378,6 @@ class ClientHandler extends Thread {
 			
 		} catch(IOException e){ 
 			e.printStackTrace();
-		
 		} 
 	} 
 } 
