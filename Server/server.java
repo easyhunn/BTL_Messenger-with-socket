@@ -5,9 +5,6 @@ import java.util.HashMap; // import the HashMap class
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
-
-import javax.xml.namespace.QName;
 
 class User {
 	private String ID;
@@ -92,7 +89,6 @@ class ClientHandler extends Thread {
 	String myGroup;
 	HashMap<String, List<User>> group_users;
 	private boolean isLogin = false;
-	private boolean havingConversation = false;
 
 	public ClientHandler(Socket s, DataInputStream dis, DataOutputStream dos, 
 						HashMap<Socket, String> list, 
@@ -131,8 +127,16 @@ class ClientHandler extends Thread {
 	//sent messeage to client
 	public void sentToCls(Socket cliSock, String mess) {
 		try {
-			DataOutputStream Dos = new DataOutputStream(cliSock.getOutputStream()); 
+			DataOutputStream Dos = new DataOutputStream(cliSock.getOutputStream());
 			Dos.writeUTF(mess);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	public void sentToCls(Socket cliSock, long mess) {
+		try {
+			DataOutputStream Dos = new DataOutputStream(cliSock.getOutputStream()); 
+			Dos.writeLong(mess);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -148,7 +152,6 @@ class ClientHandler extends Thread {
 	//remove member from group chat
 	public void removeGroupMember(String user) {
 		group_users.get(myGroup).remove(user);
-
 	}
 	//receive messeage from client
 	public String recvFromClis() {
@@ -329,8 +332,75 @@ class ClientHandler extends Thread {
 			sentToCls(cliSocket(user), "From " + userID + ": " + mess);
 		}
 	}
+
+	private int downloadFile(String fileName, Socket s) {
+		File file = new File(fileName);
+		System.out.println("file name:" + fileName);
+		try {
+			if (file.exists()) {
+				sentToCls(s, "!Download");
+				System.out.println("File size: " + file.length());
+				sentToCls(s, file.length());
+				sentToCls(s, fileName);
+				FileInputStream fis;
+				fis = new FileInputStream(file);
+				BufferedInputStream bis = new BufferedInputStream(fis);
+
+				OutputStream os = (s).getOutputStream();
+
+				byte[] contents;
+				long fileLength = file.length();
+				long current = 0;
+
+				while (current != fileLength) {
+					int size = 10000;
+					if (fileLength - current >= size)
+						current += size;
+					else {
+						size = (int) (fileLength - current);
+
+						current = fileLength;
+					}
+					contents = new byte[size];
+					bis.read(contents, 0, size);
+					os.write(contents);
+				}
+				os.flush();
+				bis.close();
+				//sentToCls(s, "Download successfully");
+			} else {
+				sentToCls(s, "!File not found");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return 0;
+	}
+	
+	private void getFileFromClis(String fileName, long fileLength) {
+		try {
+        	byte[] contents = new byte[10000];
+        	//Initialize the FileOutputStream to the output file's full path.
+    		FileOutputStream fos = new FileOutputStream(fileName);
+        	BufferedOutputStream bos = new BufferedOutputStream(fos);
+    		InputStream is = this.s.getInputStream();
+    		//No of bytes read in one read() call
+    		int bytesRead = 0;
+        	long current = 0;
+        	while ((bytesRead = is.read(contents)) != -1) {
+            	current += bytesRead;
+				bos.write(contents, 0, bytesRead);
+        		if (current == fileLength) break;
+        	}
+			bos.flush();
+			bos.close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
 	// Main handle when client isn't joinning any group
-	public int handle(String mess) {
+	private int handle(String mess) {
 		try {
 			if (mess.equals("Exit")) {
 				return handleExit();
@@ -347,6 +417,7 @@ class ClientHandler extends Thread {
 				sentToCls(s, "1: List group\n 2: Join group \n 3:Create group");
 				return groupHandler();
 			}
+
 			//sent messeage to 1 client
 			if (mess.substring(0, 2).equals("to")) {
 				String user = mess.substring(3, mess.indexOf(" ", 3));
@@ -356,40 +427,80 @@ class ClientHandler extends Thread {
 					sentToCls(this.s, "Do not contains user id " + user);
 				return 1;
 			}
+
+			//make conversation to 1 client (eg: CHAT 123)
 			if (mess.substring(0, 4).equals("CHAT")) {
 				String user = mess.substring(5, mess.length());
-			
+
 				if (!avaiableUser(user)) {
 					return handleConversation(user);
 				}
 				sentToCls(this.s, "user " + user + " isn't connecting!");
 				return 0;
 			}
+
+			//sent file (message type:  Download abc.txt)
+			if (mess.substring(0, 8).equals("Download")) {
+				String fileName = mess.substring(9, mess.length());
+				return downloadFile(fileName, this.s);
+			}
+
+			//recvFileFromClient
+			if (mess.equals("!Up file")) {
+				String messContent = dis.readUTF(); //send abc.txt to 123
+				long fileLength = dis.readLong();
+				String fileName = messContent.substring(5, messContent.indexOf(" ", 6));
+				String userRecev = messContent.substring(messContent.indexOf(" ", messContent.indexOf("to")) + 1, messContent.length());
+				System.out.println("user: " + userRecev);
+				getFileFromClis(fileName, fileLength);
+				
+				downloadFile(fileName, cliSocket(userRecev));
+				return 0;
+			}
 		} catch (Exception e) {
 			sentToCls(s, "Invalid commad");
+			return -1;
 		}
-
+		sentToCls(s, "Invalid commad");
 		
 		return 0;
 	}
 	
 	//handle when client joinning group
 	private int handleGroupChat(String mess) {
+		//closing group chat
 		if (mess.equals("@END")) {
 			removeGroupMember(userID);
-			if (group_users.get(myGroup).size() > 0	) 
+			if (group_users.get(myGroup).size() > 0)
 				sentToGroupCls(userID + " has left this conversation");
 			else {
 				//delete group when it have no member
 				groupList.remove(myGroup);
-				group_users.remove(myGroup);	
+				group_users.remove(myGroup);
 			}
 			myGroup = "";
 			joinned = false;
 			return 0;
 		}
+
+		//list member
 		if (mess.equals("@MEM")) {
 			sentToCls(this.s, get_group_users(myGroup));
+			return 1;
+		}
+		if (mess.equals("!Up file")) {
+			try {
+				String messContent = dis.readUTF(); //send abc.txt to group
+				long fileLength = dis.readLong();
+				String fileName = messContent.substring(5, messContent.indexOf(" ", 6));
+
+				getFileFromClis(fileName, fileLength);
+				for (User u : group_users.get(myGroup)) {
+					downloadFile(fileName, cliSocket(u.getID()));
+				}	
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 			return 1;
 		}
 		createNotice(mess);

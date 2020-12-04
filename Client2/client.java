@@ -9,7 +9,7 @@ import java.security.MessageDigest;
 
 //client class
 public class client { 
-
+	static String sentToServ, recvFromServ;	
 
     public static byte[] createChecksum(String filename) throws Exception {
         InputStream fis = new FileInputStream(filename);
@@ -45,7 +45,7 @@ public class client {
 			System.out.println("connected!");
 			// obtaining input and out streams 
 			DataInputStream dis = new DataInputStream(s.getInputStream()); 
-			DataOutputStream dos = new DataOutputStream(s.getOutputStream()); 
+			DataOutputStream dos = new DataOutputStream(s.getOutputStream());
 			Thread ts = new sendHandler(s, dos); 
 			Thread tr = new receiveHandler(s, dis);
 			// Invoking the start() method 
@@ -64,16 +64,40 @@ class receiveHandler extends Thread{
 	receiveHandler(Socket s, DataInputStream dis) {
 		this.s = s;
 		this.dis = dis;
+
 	}
 	@Override
-	public void run () {
+	public void run() {
+
 		while (true) {
 			try {
 				String received = dis.readUTF();
+				if (received.equals("!Download")) {
+					long fileLength = dis.readLong();
+					String fileName = dis.readUTF();
+					byte[] contents = new byte[10000];
+                	//Initialize the FileOutputStream to the output file's full path.
+                	FileOutputStream fos = new FileOutputStream(fileName);
+                	BufferedOutputStream bos = new BufferedOutputStream(fos);
+                	InputStream is = this.s.getInputStream();
+                	//No of bytes read in one read() call
+                	int bytesRead = 0;
+             		long current = 0;
+               	 	while ((bytesRead = is.read(contents)) != -1) {
+                        current += bytesRead;
+                    	bos.write(contents, 0, bytesRead);
+                    	if (current == fileLength) break;
+                	}
+					bos.flush();
+					bos.close();
+                   
+				} 
+				
 				if (received.equals("500 bye")) {
 					dis.close();
 					break;
 				}
+				
 				System.out.println("received from server:" + received);
 			} catch (Exception e) {
 				break;
@@ -94,13 +118,53 @@ class sendHandler extends Thread {
 	}
 	@Override
 	public void run() {
+		Scanner in = new Scanner(System.in);
+		String toSend = "";
 		while (true) {
-			
+			toSend = in.nextLine();
 			try {
-				Scanner in = new Scanner(System.in);
-				String tosend = in.nextLine();
-				dos.writeUTF(tosend);
-				if (tosend.equals("Exit")) {
+				if (toSend.length() > 5)
+				if (toSend.substring(0, 4).equals("send")) {
+					String fileName = toSend.substring(5, toSend.indexOf(" ", 5));
+					File file = new File(fileName);
+					if (file.exists()) {
+						dos.writeUTF("!Up file");
+						dos.writeUTF(toSend);
+						dos.writeLong(file.length());
+						//dos.writeUTF(fileName);
+						FileInputStream fis;
+						fis = new FileInputStream(file);
+						BufferedInputStream bis = new BufferedInputStream(fis);
+
+						OutputStream os = (s).getOutputStream();
+
+						byte[] contents;
+						long fileLength = file.length();
+						long current = 0;
+
+						while (current != fileLength) {
+							int size = 10000;
+							if (fileLength - current >= size)
+								current += size;
+							else {
+								size = (int) (fileLength - current);
+
+								current = fileLength;
+							}
+							contents = new byte[size];
+							bis.read(contents, 0, size);
+							os.write(contents);
+						}
+						os.flush();
+						
+					} else {
+						dos.writeUTF("File not found!");
+					}
+					continue;
+				}
+				dos.writeUTF(toSend);
+			
+				if (toSend.equals("Exit")) {
 					dos.close();
 					break;
 				}
@@ -108,5 +172,6 @@ class sendHandler extends Thread {
 				e.printStackTrace();
 			}
 		}
+		in.close();
 	}
 }
