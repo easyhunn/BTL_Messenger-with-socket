@@ -69,6 +69,7 @@ public class server {
 				
 			} 
 			catch (Exception e){ 
+	
 				s.close(); 
 				e.printStackTrace(); 
 			} 
@@ -141,6 +142,8 @@ class ClientHandler extends Thread {
 			e.printStackTrace();
 		}
 	}
+
+	// for write bytes
 
 	//sent messeage to whole clients in group
 	public void sentToGroupCls(String mess) {
@@ -216,6 +219,7 @@ class ClientHandler extends Thread {
 			System.out.println("Closing this connection.");
 			
 			list.remove(this.s); //remove from online list
+			Thread.sleep(50);
 			this.s.close();
 			
 			System.out.println("Connection closed");
@@ -399,26 +403,74 @@ class ClientHandler extends Thread {
 		}
 	}
 
+	public void writeToClis(byte[] byteArray, int q, Socket S) {
+        try{
+			DataOutputStream tempOut = new DataOutputStream(S.getOutputStream());
+            tempOut.write(byteArray, 0, q);
+        }catch (IOException e){}
+    }
+
+	private int handleVoice(Socket s) {
+		int bytesRead = 0;
+		byte[] inBytes = new byte[1];
+        while(bytesRead != -1) {
+            try{
+                bytesRead = dis.read(inBytes, 0, inBytes.length);
+			
+                String a = new String(inBytes);
+                //if(a.equals("q"))  System.out.println("test");
+                if(a.equals("q")){
+                    String end = "q";
+					inBytes = end.getBytes();
+					
+                    writeToClis(inBytes, end.length(), s);
+					bytesRead = -1;
+                    //sockets.removeAll(sockets);
+
+                }
+            }catch (IOException e){}
+            if(bytesRead >= 0) {
+                writeToClis(inBytes, bytesRead, s);
+            } else break;
+        }
+
+		return 1;
+	}
+
 	// Main handle when client isn't joinning any group
 	private int handle(String mess) {
 		try {
-			if (mess.equals("Exit")) {
-				return handleExit();
-			}	
 			if (!isLogin) {
 				return handleLogin(mess);
 			}
+			if (mess.length() > 4) {
+			if (mess.equals("Exit")) {
+				return handleExit();
+			}	
 
 			if (mess.equals("LIST")) {
 				sentToCls(s, listUser());
 				return 1;
 			}
-			if (mess.equals("GROUP")) {
-				sentToCls(s, "1: List group\n 2: Join group \n 3:Create group");
-				return groupHandler();
 			}
-
+			if (mess.length() >= 5) {	
+				if (mess.equals("GROUP")) {
+					sentToCls(s, "1: List group\n 2: Join group \n 3:Create group");
+					return groupHandler();
+				}
+				//make conversation to 1 client (eg: CHAT 123)
+				if (mess.substring(0, 4).equals("CHAT")) {
+					String user = mess.substring(5, mess.length());
+	
+					if (!avaiableUser(user)) {
+						return handleConversation(user);
+					}
+					sentToCls(this.s, "user " + user + " isn't connecting!");
+					return 0;
+				}
+			} 
 			//sent messeage to 1 client
+			if (mess.length() > 2)
 			if (mess.substring(0, 2).equals("to")) {
 				String user = mess.substring(3, mess.indexOf(" ", 3));
 				if (cliSocket(user) != null)
@@ -428,18 +480,9 @@ class ClientHandler extends Thread {
 				return 1;
 			}
 
-			//make conversation to 1 client (eg: CHAT 123)
-			if (mess.substring(0, 4).equals("CHAT")) {
-				String user = mess.substring(5, mess.length());
-
-				if (!avaiableUser(user)) {
-					return handleConversation(user);
-				}
-				sentToCls(this.s, "user " + user + " isn't connecting!");
-				return 0;
-			}
-
+		
 			//sent file (message type:  Download abc.txt)
+			if (mess.length() > 8) {
 			if (mess.substring(0, 8).equals("Download")) {
 				String fileName = mess.substring(9, mess.length());
 				return downloadFile(fileName, this.s);
@@ -457,7 +500,16 @@ class ClientHandler extends Thread {
 				downloadFile(fileName, cliSocket(userRecev));
 				return 0;
 			}
+			}
+			if (mess.length() > 10)
+			if (mess.substring(0, 10).equals("Voice chat")) {
+				String user = mess.substring(11, mess.length());
+				if (cliSocket(user) != null) return handleVoice(cliSocket(user));
+				sentToCls(this.s, "Do not contain user " + user);
+				return 0;
+			}
 		} catch (Exception e) {
+			e.printStackTrace();
 			sentToCls(s, "Invalid commad");
 			return -1;
 		}
@@ -523,7 +575,6 @@ class ClientHandler extends Thread {
 					res = handle(received);
 				else
 					res = handleGroupChat(received);
-
 				if (res == -1) //Exit
 					break;
 			} catch (IOException e) { 
@@ -534,10 +585,11 @@ class ClientHandler extends Thread {
 		} 
 		
 		try { 
+
 			this.dis.close(); 
 			this.dos.close(); 
 			
-		} catch(IOException e){ 
+		} catch(Exception e){ 
 			e.printStackTrace();
 		} 
 	} 

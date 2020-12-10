@@ -6,38 +6,12 @@ import java.io.*;
 import java.net.*;
 import java.util.Scanner;
 import java.security.MessageDigest;
+import java.io.DataOutputStream;
+import javax.sound.sampled.*;
 
 //client class
 public class client {
 	static String sentToServ, recvFromServ;
-
-	public static byte[] createChecksum(String filename) throws Exception {
-		InputStream fis = new FileInputStream(filename);
-
-		byte[] buffer = new byte[1024];
-		MessageDigest complete = MessageDigest.getInstance("MD5");
-		int numRead;
-
-		do {
-			numRead = fis.read(buffer);
-			if (numRead > 0) {
-				complete.update(buffer, 0, numRead);
-			}
-		} while (numRead != -1);
-
-		fis.close();
-		return complete.digest();
-	}
-
-	public static String getMD5Checksum(String filename) throws Exception {
-		byte[] b = createChecksum(filename);
-		String result = "";
-
-		for (int i = 0; i < b.length; i++) {
-			result += Integer.toString((b[i] & 0xff) + 0x100, 16).substring(1);
-		}
-		return result;
-	}
 
 	public static void main(String[] args) throws IOException {
 		try {
@@ -96,6 +70,7 @@ class receiveHandler extends Thread {
 				}
 
 				if (received.equals("500 bye")) {
+					Thread.sleep(100);
 					dis.close();
 					break;
 				}
@@ -113,16 +88,43 @@ class sendHandler extends Thread {
 
 	final DataOutputStream dos;
 	final Socket s;
+	static int bytesRead = 0;
+    static boolean Sound = false;
 
 	sendHandler(Socket s, DataOutputStream dos) {
 		this.s = s;
 		this.dos = dos;
 	}
+	public int getBytesRead() {
+        return bytesRead;
+    }
 
+    public void setBytesRead(int bytesRead) {
+    	this.bytesRead = bytesRead;
+    }
+
+    public void setSound(boolean sound) {
+        Sound = sound;
+    }
+
+    public boolean getSound(){
+        return Sound;
+    }
 	@Override
 	public void run() {
 		Scanner in = new Scanner(System.in);
 		String toSend = "";
+		TargetDataLine microphone = null;
+		//audio
+		try {
+			AudioFormat af = new AudioFormat(8000.0f,8,1,true,false);
+        	DataLine.Info info = new DataLine.Info(TargetDataLine.class, af);
+        	microphone = (TargetDataLine)AudioSystem.getLine(info);
+        	microphone.open(af);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
 		while (true) {
 			toSend = in.nextLine();
 			try {
@@ -165,9 +167,28 @@ class sendHandler extends Thread {
 						}
 						continue;
 					}
+				
 				dos.writeUTF(toSend);
+				if (toSend.length() > 10) {
+					if (toSend.substring(0, 10).equals("Voice chat")) {
+						microphone.start();
+						int bytesRead = 0;
+						byte[] soundData = new byte[1];
+						Thread senMess = new Thread(new SendMess(this.s, dos));
+        				senMess.start();
+        				Thread inThread = new Thread(new SoundReceiver(this.s));
+						inThread.start();
+						while(bytesRead != -1) {
+							bytesRead = microphone.read(soundData, 0, soundData.length);
+							if(bytesRead >= 0){
+								dos.write(soundData, 0, bytesRead);
+							}
+						}
+					}
+				}
 
 				if (toSend.equals("Exit")) {
+					Thread.sleep(100);
 					dos.close();
 					break;
 				}
