@@ -13,7 +13,7 @@ public class SendMess implements Runnable {
 
     @Override
     public void run() {
-        sendHandler program = new sendHandler(s, dos);
+
         while (true) {
 
             try {
@@ -23,12 +23,8 @@ public class SendMess implements Runnable {
                 dos.write(toSend.getBytes(),0,1);
                 //System.out.println(toSend.getBytes().length);
 
-                if(toSend.equals("1")){
-                    program.setSound(true);
-                }
-
                 if (toSend.equals("q")) {
-                    //dos.close();
+                    dos.close();
                     //s.close();
                     break;
                 }

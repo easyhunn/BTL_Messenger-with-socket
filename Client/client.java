@@ -21,7 +21,7 @@ public class client {
 			DataInputStream dis = new DataInputStream(s.getInputStream());
 			DataOutputStream dos = new DataOutputStream(s.getOutputStream());
 			Thread ts = new sendHandler(s, dos);
-			Thread tr = new receiveHandler(s, dis);
+			Thread tr = new receiveHandler(s, dis, dos);
 			// Invoking the start() method
 			ts.start();
 			tr.start();
@@ -34,51 +34,58 @@ public class client {
 class receiveHandler extends Thread {
 	final DataInputStream dis;
 	final Socket s;
+	final DataOutputStream dos;
 
-	receiveHandler(Socket s, DataInputStream dis) {
+	receiveHandler(Socket s, DataInputStream dis, DataOutputStream dos) {
 		this.s = s;
 		this.dis = dis;
-
+		this.dos=dos;
 	}
+
+
 
 	@Override
 	public void run() {
-
+		sendHandler endVoice = new sendHandler(s,dos);
+		System.out.println(endVoice.getSound());
 		while (true) {
-			try {
-				String received = dis.readUTF();
-				if (received.equals("!Download")) {
-					long fileLength = dis.readLong();
-					String fileName = dis.readUTF();
-					byte[] contents = new byte[10000];
-					// Initialize the FileOutputStream to the output file's full path.
-					FileOutputStream fos = new FileOutputStream(fileName);
-					BufferedOutputStream bos = new BufferedOutputStream(fos);
-					InputStream is = this.s.getInputStream();
-					// No of bytes read in one read() call
-					int bytesRead = 0;
-					long current = 0;
-					while ((bytesRead = is.read(contents)) != -1) {
-						current += bytesRead;
-						bos.write(contents, 0, bytesRead);
-						if (current == fileLength)
-							break;
+			if(endVoice.getSound() == false){
+				try {
+					String received = dis.readUTF();
+					if (received.equals("!Download")) {
+						long fileLength = dis.readLong();
+						String fileName = dis.readUTF();
+						byte[] contents = new byte[10000];
+						// Initialize the FileOutputStream to the output file's full path.
+						FileOutputStream fos = new FileOutputStream(fileName);
+						BufferedOutputStream bos = new BufferedOutputStream(fos);
+						InputStream is = this.s.getInputStream();
+						// No of bytes read in one read() call
+						int bytesRead = 0;
+						long current = 0;
+						while ((bytesRead = is.read(contents)) != -1) {
+							current += bytesRead;
+							bos.write(contents, 0, bytesRead);
+							if (current == fileLength)
+								break;
+						}
+						bos.flush();
+						bos.close();
+
 					}
-					bos.flush();
-					bos.close();
 
-				}
+					if (received.equals("500 bye")) {
+						Thread.sleep(100);
+						dis.close();
+						break;
+					}
 
-				if (received.equals("500 bye")) {
-					Thread.sleep(100);
-					dis.close();
+					System.out.println("received from server:" + received);
+				} catch (Exception e) {
 					break;
 				}
-
-				System.out.println("received from server:" + received);
-			} catch (Exception e) {
-				break;
 			}
+
 		}
 
 	}
@@ -171,18 +178,32 @@ class sendHandler extends Thread {
 				dos.writeUTF(toSend);
 				if (toSend.length() > 10) {
 					if (toSend.substring(0, 10).equals("Voice chat")) {
+						Sound = true;
+
 						microphone.start();
-						int bytesRead = 0;
+
 						byte[] soundData = new byte[1];
 						Thread senMess = new Thread(new SendMess(this.s, dos));
         				senMess.start();
         				Thread inThread = new Thread(new SoundReceiver(this.s));
 						inThread.start();
 						while(bytesRead != -1) {
-							bytesRead = microphone.read(soundData, 0, soundData.length);
-							if(bytesRead >= 0){
-								dos.write(soundData, 0, bytesRead);
+							try{
+								bytesRead = microphone.read(soundData, 0, soundData.length);
+								if(bytesRead >= 0)
+								{
+									dos.write(soundData, 0, bytesRead);
+								}
+
+							}catch(Exception e){
+								//dos.close();
+								bytesRead = -1;
 							}
+
+						}
+
+						if(bytesRead == -1){
+							Sound = false;
 						}
 					}
 				}

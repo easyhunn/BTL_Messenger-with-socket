@@ -49,7 +49,7 @@ public class server {
 		System.out.println("Waitting for client...");		
 
 		while (true) { 
-			Socket s = null; 
+			Socket s = null;
 			
 			try { 
 				
@@ -418,14 +418,11 @@ class ClientHandler extends Thread {
                 bytesRead = dis.read(inBytes, 0, inBytes.length);
 			
                 String a = new String(inBytes);
-                //if(a.equals("q"))  System.out.println("test");
+
                 if(a.equals("q")){
-                    String end = "q";
-					inBytes = end.getBytes();
-					
-                    writeToClis(inBytes, end.length(), s);
+
+                    writeToClis(inBytes, inBytes.length, s);
 					bytesRead = -1;
-                    //sockets.removeAll(sockets);
 
                 }
             }catch (IOException e){}
@@ -566,8 +563,7 @@ class ClientHandler extends Thread {
 		System.out.println("started..");
 		sentToCls(s, "User id:");
 		while (true) { 
-			try { 
-				
+			try {
 				received = dis.readUTF();
 				System.out.println("received: " + received);
 				int res;
@@ -577,7 +573,7 @@ class ClientHandler extends Thread {
 					res = handleGroupChat(received);
 				if (res == -1) //Exit
 					break;
-			} catch (IOException e) { 
+			} catch (IOException e) {
 				e.printStackTrace();
 				list.remove(this.s);
 				break;
