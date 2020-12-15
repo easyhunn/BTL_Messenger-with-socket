@@ -71,6 +71,7 @@ public class server {
 			catch (Exception e){ 
 	
 				s.close(); 
+				list.remove(s);
 				e.printStackTrace(); 
 			} 
 		} 
@@ -129,6 +130,7 @@ class ClientHandler extends Thread {
 	public void sentToCls(Socket cliSock, String mess) {
 		try {
 			DataOutputStream Dos = new DataOutputStream(cliSock.getOutputStream());
+			System.out.println("sent " + mess);
 			Dos.writeUTF(mess);
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -410,7 +412,15 @@ class ClientHandler extends Thread {
         }catch (IOException e){}
     }
 
+	private int connectVoiceChat (String user) {
+		sentToCls(this.s, "!Voice chat " + user) ;
+		Socket s = cliSocket(user);
+		if (this.s != s)
+			sentToCls(s, "!Voice chat " + userID);
+		return 1;
+	}
 	private int handleVoice(Socket s) {
+		
 		int bytesRead = 0;
 		byte[] inBytes = new byte[1];
         while(bytesRead != -1) {
@@ -418,21 +428,23 @@ class ClientHandler extends Thread {
                 bytesRead = dis.read(inBytes, 0, inBytes.length);
 			
                 String a = new String(inBytes);
-                //if(a.equals("q"))  System.out.println("test");
+				//if(a.equals("q"))  System.out.println("test");
                 if(a.equals("q")){
                     String end = "q";
 					inBytes = end.getBytes();
 					
-                    writeToClis(inBytes, end.length(), s);
+					//writeToClis(inBytes, end.length(), s);
+					//read last byte
+					bytesRead = dis.read(inBytes, 0, inBytes.length);
 					bytesRead = -1;
                     //sockets.removeAll(sockets);
 
                 }
             }catch (IOException e){}
-            if(bytesRead >= 0) {
+            if(bytesRead > 0) {
                 writeToClis(inBytes, bytesRead, s);
-            } else break;
-        }
+            }
+		}
 
 		return 1;
 	}
@@ -501,12 +513,24 @@ class ClientHandler extends Thread {
 				return 0;
 			}
 			}
-			if (mess.length() > 10)
-			if (mess.substring(0, 10).equals("Voice chat")) {
-				String user = mess.substring(11, mess.length());
-				if (cliSocket(user) != null) return handleVoice(cliSocket(user));
-				sentToCls(this.s, "Do not contain user " + user);
-				return 0;
+
+			//Client request voice chat
+			if (mess.length() > 10) {
+				if (mess.substring(0, 10).equals("Voice chat")) {
+					String user = mess.substring(11, mess.length());
+					if (cliSocket(user) != null) return	connectVoiceChat(user);
+					sentToCls(this.s, "Do not contain user " + user);
+					return 0;
+				}
+			}
+			//execute voice chat
+			if (mess.length() > 11) {
+				if (mess.substring(0, 11).equals("!Voice chat")) {
+					String user = mess.substring(12, mess.length());
+					if (cliSocket(user) != null) return	handleVoice(cliSocket(user));
+					sentToCls(this.s, "Do not contain user " + user);
+					return 0;
+				}
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -514,7 +538,6 @@ class ClientHandler extends Thread {
 			return -1;
 		}
 		sentToCls(s, "Invalid commad");
-		
 		return 0;
 	}
 	
@@ -567,7 +590,6 @@ class ClientHandler extends Thread {
 		sentToCls(s, "User id:");
 		while (true) { 
 			try { 
-				
 				received = dis.readUTF();
 				System.out.println("received: " + received);
 				int res;
@@ -579,7 +601,7 @@ class ClientHandler extends Thread {
 					break;
 			} catch (IOException e) { 
 				e.printStackTrace();
-				list.remove(this.s);
+				list.remove(s);
 				break;
 			} 
 		} 
