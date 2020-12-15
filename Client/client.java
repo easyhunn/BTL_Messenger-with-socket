@@ -117,7 +117,7 @@ class receiveHandler extends Thread {
 							dos.write(soundData, 0, bytesRead);
 						}
 					}
-				
+					receiveHandler.sleep(20);
 					microphone.close();
 					
 				}
