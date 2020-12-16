@@ -420,19 +420,20 @@ class ClientHandler extends Thread {
 		return 1;
 	}
 	private int handleVoice(Socket s) {
-		
+		int n = 2;
 		int bytesRead = 0;
 		byte[] inBytes = new byte[1];
-        while(bytesRead != -1) {
+        while(bytesRead != -1 && n > 0){
             try{
                 bytesRead = dis.read(inBytes, 0, inBytes.length);
-			
-                String a = new String(inBytes);
+
+				String a = new String(inBytes);
 				//if(a.equals("q"))  System.out.println("test");
                 if(a.equals("q")){
+                	n--;
                     String end = "q";
 					inBytes = end.getBytes();
-					
+
 					//writeToClis(inBytes, end.length(), s);
 					//read last byte
 					bytesRead = dis.read(inBytes, 0, inBytes.length);
@@ -495,23 +496,23 @@ class ClientHandler extends Thread {
 		
 			//sent file (message type:  Download abc.txt)
 			if (mess.length() > 8) {
-			if (mess.substring(0, 8).equals("Download")) {
-				String fileName = mess.substring(9, mess.length());
-				return downloadFile(fileName, this.s);
-			}
+				if (mess.substring(0, 8).equals("Download")) {
+					String fileName = mess.substring(9, mess.length());
+					return downloadFile(fileName, this.s);
+				}
 
-			//recvFileFromClient
-			if (mess.equals("!Up file")) {
-				String messContent = dis.readUTF(); //send abc.txt to 123
-				long fileLength = dis.readLong();
-				String fileName = messContent.substring(5, messContent.indexOf(" ", 6));
-				String userRecev = messContent.substring(messContent.indexOf(" ", messContent.indexOf("to")) + 1, messContent.length());
-				System.out.println("user: " + userRecev);
-				getFileFromClis(fileName, fileLength);
-				
-				downloadFile(fileName, cliSocket(userRecev));
-				return 0;
-			}
+				//recvFileFromClient
+				if (mess.equals("!Up file")) {
+					String messContent = dis.readUTF(); //send abc.txt to 123
+					long fileLength = dis.readLong();
+					String fileName = messContent.substring(5, messContent.indexOf(" ", 6));
+					String userRecev = messContent.substring(messContent.indexOf(" ", messContent.indexOf("to")) + 1, messContent.length());
+					System.out.println("user: " + userRecev);
+					getFileFromClis(fileName, fileLength);
+
+					downloadFile(fileName, cliSocket(userRecev));
+					return 0;
+				}
 			}
 
 			//Client request voice chat
